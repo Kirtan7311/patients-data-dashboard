@@ -11,9 +11,9 @@
             padding: 0;
             background-color: #f4f4f4;
             display: flex;
-            flex-direction: column; 
-            align-items: stretch; 
-            min-height: 100vh; 
+            flex-direction: column;
+            align-items: stretch;
+            min-height: 100vh;
         }
 
         .header-bar {
@@ -22,19 +22,76 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            position: relative;
         }
 
         .top-left {
-            position: absolute; 
-            left: 15px;
+            position: absolute;
+            left: 18px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .search-input-wrapper {
+            position: relative;
+            display: inline-block;
         }
 
         .top-left input[type="text"] {
             padding: 10px;
             font-size: 16px;
-            width: 200px;
+            width: 267px;
             border: 2px solid #ccc;
             border-radius: 5px;
+        }
+
+        .top-left label {
+            font-size: 16px;
+            color: #555;
+            white-space: nowrap;
+        }
+
+        .top-left input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .search-prompt {
+            position: absolute;
+            top: calc(100% + 5px);
+            left: 0;
+            font-size: 1.1em;
+            color: #555;
+            background-color: #f0f0f0;
+            padding: 8px 12px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            white-space: nowrap;
+            z-index: 10;
+            display: none;
+        }
+
+        .search-prompt .arrow {
+            font-size: 1.5em;
+            margin-right: 5px;
+            color: #007bff;
+        }
+
+        .patient-not-found-msg {
+            position: absolute;
+            top: calc(100% + 5px);
+            left: 0;
+            font-size: 0.95em;
+            color: #d9534f;
+            background-color: #fce8e6;
+            padding: 6px 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            white-space: nowrap;
+            z-index: 10;
+            display: none;
         }
 
         .image-number {
@@ -43,7 +100,20 @@
             padding: 5px 10px;
             border-radius: 5px;
             font-weight: bold;
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .image-number input[type="number"] {
+            width: 50px;
+            padding: 3px 5px;
+            font-size: 1em;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            text-align: center;
+            background-color: rgba(255, 255, 255, 0.8);
+            color: #333;
         }
 
         .content-area {
@@ -63,14 +133,17 @@
             max-width: 90vw;
             max-height: 95vh;
             overflow: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         .image-container img {
             max-width: 100%;
-            max-height: 70vh; 
+            max-height: 70vh;
             height: auto;
             border-radius: 5px;
-            display: none; 
+            display: none;
         }
 
         .nav-buttons {
@@ -88,16 +161,16 @@
             color: white;
             border-radius: 5px;
             cursor: pointer;
-            transition: background-color 0.3s ease; 
+            transition: background-color 0.3s ease;
         }
 
         button:hover {
-            background-color: #0056b3; 
+            background-color: #0056b3;
         }
 
         button:active {
-            background-color: #003d80; 
-            transform: translateY(1px); 
+            background-color: #003d80;
+            transform: translateY(1px);
         }
 
         button:disabled {
@@ -114,10 +187,20 @@
 
     <div class="header-bar">
         <div class="top-left">
-            <input type="text" id="searchBox" placeholder="Enter patient number" />
+            <div class="search-input-wrapper">
+                <input type="text" id="searchBox" placeholder="Enter patient number (e.g. 1, 2,..., 20)" />
+                <div id="searchPrompt" class="search-prompt">
+                    <span class="arrow">&#8593;</span> Enter Patient Number here!
+                </div>
+                <div id="patientNotFoundMsg" class="patient-not-found-msg">
+                    Patient does not exist. Please try another ID.
+                </div>
+            </div>
+            <input type="checkbox" id="eventCheckbox" />
+            <label for="eventCheckbox">Show Event Images Only</label>
         </div>
         <div class="image-number">
-            <div id="imageNumber"></div>
+            Image <input type="number" id="imageNumberInput" min="1" value="1" /> of <span id="totalImagesDisplay"></span>
         </div>
     </div>
 
@@ -156,61 +239,226 @@
         };
 
         let currentPatient = '';
-        let currentImage = 1;
-        let totalImages = 0;
+        let currentImageIndex = 0;
+        let allBaseImageNumbers = [];
+        let filteredImages = [];
 
         const searchBox = document.getElementById('searchBox');
         const patientImage = document.getElementById('patientImage');
-        const imageNumberDisplay = document.getElementById('imageNumber');
+        const imageNumberInput = document.getElementById('imageNumberInput');
+        const totalImagesDisplay = document.getElementById('totalImagesDisplay');
         const prevBtn = document.getElementById('prevBtn');
         const nextBtn = document.getElementById('nextBtn');
+        const eventCheckbox = document.getElementById('eventCheckbox');
+        const searchPrompt = document.getElementById('searchPrompt');
+        const patientNotFoundMsg = document.getElementById('patientNotFoundMsg');
+
+        function resetImageDisplay(shouldDisableInput = true) {
+            patientImage.style.display = 'none';
+            patientImage.src = '';
+            imageNumberInput.value = '';
+            totalImagesDisplay.textContent = '';
+            prevBtn.disabled = true;
+            nextBtn.disabled = true;
+            if (shouldDisableInput) {
+                imageNumberInput.disabled = true;
+                eventCheckbox.disabled = true;
+            }
+        }
+
+        function populateAllBaseImageNumbers() {
+            allBaseImageNumbers = [];
+            if (currentPatient) {
+                const totalCount = patientData[currentPatient];
+                for (let i = 1; i <= totalCount; i++) {
+                    allBaseImageNumbers.push(i);
+                }
+            }
+        }
+
+        function isEventImage(patientNum, baseImageNum) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => resolve(true);
+                img.onerror = () => resolve(false);
+                img.src = `images/patient_${patientNum}/${baseImageNum}_event.png`;
+            });
+        }
+
+        async function filterImages() {
+            if (!currentPatient) {
+                filteredImages = [];
+                loadImage();
+                return;
+            }
+
+            let tempFiltered = [];
+            const sortedBaseNumbers = [...allBaseImageNumbers].sort((a, b) => a - b);
+
+            if (eventCheckbox.checked) {
+                const eventChecks = sortedBaseNumbers.map(num => isEventImage(currentPatient, num));
+                const results = await Promise.all(eventChecks);
+
+                results.forEach((isEvent, index) => {
+                    if (isEvent) {
+                        tempFiltered.push(sortedBaseNumbers[index]);
+                    }
+                });
+            } else {
+                tempFiltered = sortedBaseNumbers;
+            }
+
+            filteredImages = tempFiltered;
+
+            if (filteredImages.length > 0) {
+                const currentImageNumber = (currentImageIndex >= 0 && currentImageIndex < allBaseImageNumbers.length) ? allBaseImageNumbers[currentImageIndex] : -1;
+                const newIndex = filteredImages.indexOf(currentImageNumber);
+
+                if (newIndex !== -1) {
+                    currentImageIndex = newIndex;
+                } else {
+                    currentImageIndex = 0;
+                }
+            } else {
+                currentImageIndex = -1;
+            }
+
+            loadImage();
+        }
+
+        function loadImage() {
+            if (!currentPatient || filteredImages.length === 0 || currentImageIndex === -1) {
+                resetImageDisplay(true);
+                return;
+            }
+
+            const imageNumberToLoad = filteredImages[currentImageIndex];
+            const regularPath = `images/patient_${currentPatient}/${imageNumberToLoad}.png`;
+            const eventPath = `images/patient_${currentPatient}/${imageNumberToLoad}_event.png`;
+
+            patientImage.src = '';
+            patientImage.style.display = 'none';
+
+            let attemptingEventPath = false;
+
+            patientImage.onload = () => {
+                patientImage.style.display = 'block';
+                imageNumberInput.value = currentImageIndex + 1;
+                totalImagesDisplay.textContent = filteredImages.length;
+                prevBtn.disabled = currentImageIndex === 0;
+                nextBtn.disabled = currentImageIndex === filteredImages.length - 1;
+                imageNumberInput.disabled = false;
+                eventCheckbox.disabled = false;
+            };
+
+            patientImage.onerror = () => {
+                if (!attemptingEventPath && eventCheckbox.checked) {
+                    console.warn(`Unexpected error: Regular image ${regularPath} failed while event checkbox is checked.`);
+                    resetImageDisplay(false);
+                } else if (!attemptingEventPath && !eventCheckbox.checked) {
+                    attemptingEventPath = true;
+                    patientImage.src = eventPath;
+                } else if (attemptingEventPath) {
+                    console.error(`Failed to load either ${regularPath} or ${eventPath}. Image not found.`);
+                    resetImageDisplay(false);
+                }
+                imageNumberInput.disabled = false;
+            };
+
+            if (eventCheckbox.checked) {
+                attemptingEventPath = true;
+                patientImage.src = eventPath;
+            } else {
+                attemptingEventPath = false;
+                patientImage.src = regularPath;
+            }
+        }
+
 
         searchBox.addEventListener('input', function() {
-            const patientNumber = searchBox.value.trim().padStart(3, '0');
-            if (patientData[patientNumber]) {
-                currentPatient = patientNumber;
-                currentImage = 1;
-                totalImages = patientData[currentPatient];
-                loadImage();
+            const patientNumber = searchBox.value.trim();
+            const paddedPatientNumber = patientNumber.padStart(3, '0');
+
+            searchPrompt.style.display = 'none';
+            patientNotFoundMsg.style.display = 'none';
+
+            if (patientNumber === '') {
+                currentPatient = '';
+                allBaseImageNumbers = [];
+                filteredImages = [];
+                resetImageDisplay(true); 
+                searchPrompt.style.display = 'block';
+                return; 
+            }
+            if (patientData[paddedPatientNumber]) {
+                currentPatient = paddedPatientNumber;
+                populateAllBaseImageNumbers();
+                currentImageIndex = 0;
+                filterImages(); 
+                imageNumberInput.disabled = false;
+                eventCheckbox.disabled = false;
             } else {
                 currentPatient = '';
-                totalImages = 0;
-                patientImage.style.display = 'none';
-                patientImage.src = '';
-                imageNumberDisplay.textContent = '';
-                prevBtn.disabled = true;
-                nextBtn.disabled = true;
+                allBaseImageNumbers = [];
+                filteredImages = [];
+                resetImageDisplay(true);
+                patientNotFoundMsg.textContent = "Patient does not exist. Please try another Patient ID.";
+                patientNotFoundMsg.style.display = 'block';
             }
         });
 
         prevBtn.addEventListener('click', function() {
-            if (currentImage > 1) {
-                currentImage--;
+            if (currentImageIndex > 0) {
+                currentImageIndex--;
                 loadImage();
             }
         });
 
         nextBtn.addEventListener('click', function() {
-            if (currentImage < totalImages) {
-                currentImage++;
+            if (currentImageIndex < filteredImages.length - 1) {
+                currentImageIndex++;
                 loadImage();
             }
         });
 
-        function loadImage() {
-            const imagePath = `images/patient_${currentPatient}/${currentImage}.png`;
-            patientImage.src = imagePath;
-            patientImage.onload = () => {
-                patientImage.style.display = 'block';
-                imageNumberDisplay.textContent = `Image ${currentImage} of ${totalImages}`;
-            };
-            patientImage.onerror = () => {
+        imageNumberInput.addEventListener('input', function() {
+            const inputVal = this.value.trim();
+
+            if (!currentPatient) {
+                resetImageDisplay(true);
+                return;
+            }
+
+            if (inputVal === '') {
                 patientImage.style.display = 'none';
-                imageNumberDisplay.textContent = '';
-            };
-            prevBtn.disabled = currentImage === 1;
-            nextBtn.disabled = currentImage === totalImages;
-        }
+                patientImage.src = '';
+                totalImagesDisplay.textContent = filteredImages.length;
+                prevBtn.disabled = true;
+                nextBtn.disabled = true;
+                return;
+            }
+
+            const desiredIndex = parseInt(inputVal);
+
+            if (!isNaN(desiredIndex) && desiredIndex >= 1 && desiredIndex <= filteredImages.length) {
+                currentImageIndex = desiredIndex - 1;
+                loadImage();
+            } else {
+                patientImage.style.display = 'none';
+                patientImage.src = '';
+                totalImagesDisplay.textContent = filteredImages.length;
+                prevBtn.disabled = true;
+                nextBtn.disabled = true;
+            }
+        });
+
+        eventCheckbox.addEventListener('change', function() {
+            filterImages();
+        });
+
+        resetImageDisplay(true); 
+        searchPrompt.style.display = 'block'; 
+        patientNotFoundMsg.style.display = 'none';
     </script>
 
 </body>
