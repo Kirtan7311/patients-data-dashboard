@@ -193,7 +193,7 @@
                     <span class="arrow">&#8593;</span> Enter Patient Number here!
                 </div>
                 <div id="patientNotFoundMsg" class="patient-not-found-msg">
-                    Patient does not exist. Please try another ID.
+                    Patient does not exist. Please try a valid Patient ID between 1 to 20.
                 </div>
             </div>
             <input type="checkbox" id="eventCheckbox" />
@@ -402,7 +402,7 @@
                 allBaseImageNumbers = [];
                 filteredImages = [];
                 resetImageDisplay(true);
-                patientNotFoundMsg.textContent = "Patient does not exist. Please try another Patient ID.";
+                patientNotFoundMsg.textContent = "Patient does not exist. Please enter a valid Patient ID between 1 to 20.";
                 patientNotFoundMsg.style.display = 'block';
             }
         });
